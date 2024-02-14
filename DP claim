@@ -1,0 +1,44 @@
+// ==UserScript==
+// @name         PokeHeroes Auto Claim
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  Automatically clicks the "claim" link on PokeHeroes and refreshes the page every 240 seconds, avoiding a specific link.
+// @author       Domodoco
+// @match        https://pokeheroes.com/dw_shop*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // Function to check if the link should be clicked
+    function shouldClickLink(link) {
+        return !link.href.includes("claim=4");
+    }
+
+    // Function to click the "claim" link
+    function clickClaimLink() {
+        var claimLinks = document.querySelectorAll('a[href*="claim"]');
+        claimLinks.forEach(function(link) {
+            if (shouldClickLink(link)) {
+                link.click();
+            }
+        });
+    }
+
+    // Function to refresh the page every 240 seconds
+    function refreshPage() {
+        setTimeout(function() {
+            location.reload();
+        }, 240000); // 240 seconds
+    }
+
+    // Main function to start auto-claiming
+    function startAutoClaim() {
+        clickClaimLink();
+        refreshPage();
+    }
+
+    // Initial call to start auto-claiming
+    startAutoClaim();
+})();
