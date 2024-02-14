@@ -1,0 +1,43 @@
+// ==UserScript==
+// @name         PokeHeroes Auto Refresh and Love Clicker
+// @namespace    http://tampermonkey.net/
+// @version      0.1
+// @description  Automatically clicks the "Love Egg" and "Love Pokemon" links on PokeHeroes homepage with a delay of 1 second between clicks, and refreshes the page every 30 seconds.
+// @author       Domodoco
+// @match        https://pokeheroes.com/*
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // Function to click the "Love Egg" link
+    function clickLoveEggLink() {
+        var loveEggLink = document.querySelector('a[onclick="interactLoveEgg();"]');
+        if (loveEggLink) {
+            loveEggLink.click();
+        }
+    }
+
+    // Function to click the "Love Pokemon" link after a delay of 1 second
+    function clickLovePokemonLink() {
+        setTimeout(function() {
+            var lovePokemonLink = document.querySelector('a[onclick="interactLovePkmn();"]');
+            if (lovePokemonLink) {
+                lovePokemonLink.click();
+            }
+        }, 1000); // 1 second delay
+    }
+
+    // Function to refresh the page every 30 seconds
+    function refreshPage() {
+        setInterval(function() {
+            location.reload();
+        }, 30000); // 30 seconds
+    }
+
+    // Initial calls to click both links and start refreshing the page
+    clickLoveEggLink();
+    clickLovePokemonLink();
+    refreshPage();
+})();
