@@ -1,0 +1,68 @@
+// ==UserScript==
+// @name         Auto Party Storage
+// @namespace    http://tampermonkey.net/
+// @version      1.1
+// @description Automatically stores party Pokémon into box 3 and then redirects to tall grass page (use with tall grass for best results)
+// @author       Domodoco
+// @match        https://pokeheroes.com/storage_box
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // Helper function to wait for an element to exist
+    function waitForElement(selector, callback) {
+        const interval = setInterval(() => {
+            const element = document.querySelector(selector);
+            if (element) {
+                clearInterval(interval);
+                callback(element);
+            }
+        }, 2000); // Check every 2000ms
+    }
+
+    // Simulate a delay
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    // Main logic to automate the actions
+    async function automateActions() {
+        console.log("Starting automation...");
+
+        // Step 1: Wait for "Select All" link and click it
+        waitForElement("a[onclick='selectAll();']", async (selectAllButton) => {
+            console.log("Clicking Select All...");
+            selectAllButton.click();
+            await delay(30000); // Wait 30 seconds after clicking
+
+            // Step 2: Wait for "Move Pokémon" button and click it
+            waitForElement("button.b1", async (movePokemonButton) => {
+                console.log("Clicking Move Pokémon...");
+                movePokemonButton.click();
+                await delay(30000); // Wait 30 seconds after clicking
+
+                // Step 3: Wait for "Box 3" button and click it
+                waitForElement("button[onclick^='selectBox(3']", async (box3Button) => {
+                    console.log("Attempting to click Box 3...");
+                    if (box3Button) {
+                        console.log("Box 3 button found!");
+                        box3Button.click(); // Trigger click
+                        box3Button.dispatchEvent(new Event('click', { bubbles: true })); // Trigger additional events, if necessary
+                        await delay(30000); // Wait 30 seconds after clicking
+                    } else {
+                        console.error("Box 3 button not found!");
+                    }
+
+                    // Step 4: Redirect to tall grass page
+                    console.log("Redirecting to Tall Grass...");
+                    window.location.href = "https://pokeheroes.com/tall_grass";
+                });
+            });
+        });
+    }
+
+    // Run the automation when the page is fully loaded
+    window.addEventListener('load', automateActions);
+})();
