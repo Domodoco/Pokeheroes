@@ -1,0 +1,212 @@
+// ==UserScript==
+// @name         PH - Epic Clicker Multi-Click with Feed Toggle
+// @version      3.1
+// @description  Automatically runs on clicklist + multi-click with adjustable batch size and feed toggle
+// @author       warpKaiba (updated by Domodoco)
+// @match        https://pokeheroes.com/pokemon_lite*
+// @grant        GM.xmlHttpRequest
+// @connect      pokeheroes.com
+// @connect      staticpokeheroes.com
+// @icon         https://vignette.wikia.nocookie.net/pkmnshuffle/images/7/7f/Ducklett.png/revision/latest?cb=20170409032016
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    let clickSpeed = getCookie('clickSpeed') || 500;
+    let batchSize = getCookie('batchSize') || 3;
+    let feedEnabled = getCookie('feedEnabled') === 'true'; // Default to false if not set
+
+    const cheatContainer = document.querySelector('.cheat_valid');
+    if (cheatContainer) {
+        processCheatValidation(cheatContainer);
+    } else {
+        initAutoClicker();
+    }
+
+    /**
+     * Handles cheat validation logic for multi-click.
+     * @param {Element} container - The cheat container element.
+     */
+    function processCheatValidation(container) {
+        const pokemonURLs = Array.from(container.querySelectorAll('img[onclick]'));
+        const pokemonAnswer = container.querySelector('img').src.match(/\d+/)?.[0];
+        const validationNumbers = pokemonURLs.map((img) => img.src.match(/\d+/)?.[0]);
+
+        console.log("Pokemon URLs:", pokemonURLs);
+        console.log("Validation Numbers:", validationNumbers);
+        console.log("Answer:", pokemonAnswer);
+
+        pokemonURLs.forEach((img, index) => {
+            GM.xmlHttpRequest({
+                method: 'GET',
+                url: img.src,
+                headers: {
+                    'User-Agent': navigator.userAgent,
+                    'Accept': 'text/xml',
+                },
+                onload: (response) => handleValidation(response, pokemonAnswer, validationNumbers, index),
+            });
+        });
+    }
+
+    /**
+     * Handles the HTTP response for cheat validation.
+     * @param {Object} response - The XMLHttpRequest response.
+     * @param {String} pokemonAnswer - The correct Pokémon's ID.
+     * @param {Array} validationNumbers - List of validation numbers.
+     * @param {Number} index - The current index in the loop.
+     */
+    function handleValidation(response, pokemonAnswer, validationNumbers, index) {
+        const urlMatch = response.finalUrl.match(/\d+/)?.[0];
+
+        console.log(`Response for index ${index}:`, urlMatch);
+        if (parseInt(urlMatch) === parseInt(pokemonAnswer)) {
+            console.log(`Match found at index ${index}. Validating Pokémon ID ${validationNumbers[index]}`);
+            chooseValidation(parseInt(validationNumbers[index]));
+        }
+    }
+
+    /** Initializes the auto-clicker mode with multi-click and feed toggle support. */
+    function initAutoClicker() {
+        let oldPKMN = 0;
+
+        // Add UI elements for speed, batch size, and feed toggle
+        const textbar = document.querySelector('#textbar');
+        if (textbar) {
+            textbar.insertAdjacentHTML(
+                'afterbegin',
+                `
+                <div style="margin-bottom: 10px;">
+                    <input id="clickspeedinput" type="number" value="${clickSpeed}" placeholder="Click Speed (ms)" />
+                    <input id="batchsizeinput" type="number" value="${batchSize}" placeholder="Batch Size" />
+                    <button id="clickspeedsubmit">Apply</button>
+                </div>
+                <button id="togglefeed" style="background-color: ${feedEnabled ? 'green' : 'red'}; color: white;">
+                    Feed: ${feedEnabled ? 'Enabled' : 'Disabled'}
+                </button>
+                <br>The lower the speed, the faster it will go. Normal site limit: 200ms.
+                `
+            );
+
+            // Update speed and batch size
+            document.querySelector('#clickspeedsubmit').addEventListener('click', () => {
+                clickSpeed = Math.max(1, parseInt(document.querySelector('#clickspeedinput').value, 10) || 500);
+                batchSize = Math.max(1, parseInt(document.querySelector('#batchsizeinput').value, 10) || 3);
+                setCookie('clickSpeed', clickSpeed);
+                setCookie('batchSize', batchSize);
+                restartClicker();
+            });
+
+            // Toggle feed functionality
+            document.querySelector('#togglefeed').addEventListener('click', () => {
+                feedEnabled = !feedEnabled;
+                setCookie('feedEnabled', feedEnabled);
+                updateFeedButton();
+            });
+        }
+
+        // Start the auto-clicker
+        startClicker();
+
+        function startClicker() {
+            window.clickInterval = setInterval(() => clickPokemonBatch(oldPKMN), clickSpeed);
+        }
+
+        function stopClicker() {
+            clearInterval(window.clickInterval);
+        }
+
+        function restartClicker() {
+            stopClicker();
+            startClicker();
+        }
+
+        function updateFeedButton() {
+            const button = document.querySelector('#togglefeed');
+            button.style.backgroundColor = feedEnabled ? 'green' : 'red';
+            button.textContent = `Feed: ${feedEnabled ? 'Enabled' : 'Disabled'}`;
+        }
+
+        /**
+         * Handles Pokémon interactions in batches.
+         * @param {Number} oldPKMN - ID of the previously interacted Pokémon.
+         */
+        function clickPokemonBatch(oldPKMN) {
+            if (!pkmn_arr || pkmn_arr.length === 0) return;
+
+            for (let i = 0; i < batchSize && i < pkmn_arr.length; i++) {
+                const pokemon = pkmn_arr[i];
+                if (pokemon && pokemon !== oldPKMN) {
+                    const method = determineInteractionMethod();
+                    performInteraction(pokemon[0], pokemon[1], method, pokemon);
+                    oldPKMN = pokemon;
+                    console.log(`Interacted with ${method}:`, pokemon);
+                }
+            }
+        }
+
+        /**
+         * Determines the interaction method based on feed toggle and berry availability.
+         * @returns {String} - The interaction method ("feed", "warm", or "train").
+         */
+        function determineInteractionMethod() {
+            if (feedEnabled && int_berry && berry_bag.some((berry) => berry[1] > 0)) {
+                return 'feed';
+            }
+            return 'warm'; // Default to warming
+        }
+    }
+
+    /** Helper Functions **/
+
+    /**
+     * Simulates interaction with a Pokémon.
+     * @param {String} id - Pokémon ID.
+     * @param {String} sid - Pokémon SID.
+     * @param {String} method - Interaction type (e.g., "warm", "train", "feed").
+     * @param {Array} pokemonData - Additional data about the Pokémon.
+     */
+    function performInteraction(id, sid, method, pokemonData) {
+        const data = {
+            pkmnid: id,
+            pkmnsid: sid,
+            method,
+            berry: method === 'feed' ? int_berry : '',
+            timeclick: Date.now(),
+            inarow: cl_c,
+        };
+
+        $("div#interact_tab").load('includes/ajax/pokemon/lite_interact.php', data, function () {
+            int_lock = false;
+            $(this).show();
+
+            if ($(this).html().includes('success')) cl_c++;
+            loadNextPkmn();
+        });
+    }
+
+    /**
+     * Sets a cookie with the given name and value.
+     * @param {String} name - The cookie name.
+     * @param {String} value - The cookie value.
+     */
+    function setCookie(name, value) {
+        document.cookie = `${name}=${encodeURIComponent(value)}; path=/`;
+    }
+
+    /**
+     * Gets a cookie value by its name.
+     * @param {String} name - The cookie name.
+     * @returns {String} - The cookie value.
+     */
+    function getCookie(name) {
+        const cookies = document.cookie.split(';').map((c) => c.trim());
+        for (const cookie of cookies) {
+            if (cookie.startsWith(`${name}=`)) {
+                return decodeURIComponent(cookie.substring(name.length + 1));
+            }
+        }
+        return '';
+    }
+})();
