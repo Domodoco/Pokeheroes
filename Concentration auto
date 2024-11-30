@@ -1,0 +1,118 @@
+// ==UserScript==
+// @name         PH - Auto Concentration Game (Updated)
+// @namespace    http://tampermonkey.net/
+// @version      1.1
+// @description  Automatically plays PokeHeroes Concentration game by matching Pokémon cards.
+// @author       ewei068 (Updated by Domodoco)
+// @match        https://pokeheroes.com/gc_concentration*
+// @icon         https://vignette.wikia.nocookie.net/pkmnshuffle/images/7/7f/Ducklett.png/revision/latest?cb=20170409032016
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    console.log("Starting PH - Auto Concentration Game...");
+
+    // Set Difficulty
+    const difficulty = 0; // 0 = Easy, 1 = Medium, 2 = Hard
+    let numPkmn = [16, 26, 36][difficulty]; // Number of cards based on difficulty
+    let covered = Array.from(Array(numPkmn).keys()); // Array of card indices
+    const pkmnMap = {}; // Map to store flipped Pokémon
+    let cardLoading = false; // Ensure no simultaneous card flips
+
+    // Helper to sleep for a given time (in ms)
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    // Flip a card and return the Pokémon number
+    async function flipCard(index) {
+        if (cardLoading) return -1;
+        cardLoading = true;
+
+        console.log(`Flipping card ${index}...`);
+        const url = "includes/ajax/game_center/concentration_flip.php";
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: `card=${index}`
+            });
+            const text = await response.text();
+            const container = document.createElement("div");
+            container.innerHTML = text;
+
+            // Extract Pokémon ID
+            const pkdxnr = container.querySelector(".pkdxnr");
+            const pkmnId = pkdxnr ? parseInt(pkdxnr.textContent.trim()) : -1;
+            console.log(`Card ${index} revealed Pokémon ID: ${pkmnId}`);
+
+            // Handle match or miss
+            if (container.querySelector(".succ")) {
+                const success = container.querySelector(".succ").textContent.trim();
+                if (success === "0") {
+                    console.log("Cards do not match. Flipping back...");
+                    await sleep(100); // Wait briefly before resetting cards
+                    document.querySelectorAll(".concenFlipped").forEach(el => {
+                        el.classList.remove("concenFlipped");
+                    });
+                } else {
+                    console.log("Match found!");
+                    document.querySelectorAll(".concenFlipped").forEach(el => el.remove());
+                    checkEndGame();
+                }
+            }
+
+            cardLoading = false;
+            return pkmnId;
+        } catch (err) {
+            console.error(`Error flipping card ${index}:`, err);
+            cardLoading = false;
+            return -1;
+        }
+    }
+
+    // Main game loop
+    async function playGame() {
+        while (covered.length > 0) {
+            console.log(`Remaining cards: ${covered.length}`);
+            const id1 = covered.pop();
+            const pkmn1 = await flipCard(id1);
+
+            if (pkmn1 === -1) continue; // Skip if flip failed
+
+            await sleep(100); // Wait before the next action
+
+            if (pkmnMap[pkmn1] !== undefined) {
+                // If Pokémon is already in map, match it
+                console.log(`Matching card ${id1} with card ${pkmnMap[pkmn1]}...`);
+                await flipCard(pkmnMap[pkmn1]);
+            } else {
+                // Flip another card
+                const id2 = covered.pop();
+                const pkmn2 = await flipCard(id2);
+
+                if (pkmn1 !== pkmn2) {
+                    // No match, add to map
+                    console.log(`No match: ${pkmn1} and ${pkmn2}`);
+                    pkmnMap[pkmn1] = id1;
+                    if (pkmn2 in pkmnMap) {
+                        covered.push(id2); // Re-add if pkmn2 already mapped
+                    } else {
+                        pkmnMap[pkmn2] = id2;
+                    }
+                }
+            }
+
+            await sleep(100); // Wait between turns
+        }
+
+        // Reload if game isn't complete
+        console.log("Game completed or restarting...");
+        await sleep(2500);
+        window.location.href = `https://pokeheroes.com/gc_concentration?d=${difficulty}`;
+    }
+
+    // Start the bot
+    playGame();
+})();
