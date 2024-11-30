@@ -1,0 +1,88 @@
+// ==UserScript==
+// @name          Tall Grass
+// @namespace    http://tampermonkey.net/
+// @version      1.7
+// @description  Automatically click on non-greyed-out grass tiles, handle popups, and immediately redirect to PokeHeroes Storage Box.
+// @author       Domodoco
+// @match        https://pokeheroes.com/tall_grass
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    console.log("Tall Grass script started.");
+
+    // Function to find and click on non-greyed-out grass
+    function clickOnGrass() {
+        console.log("Searching for clickable grass...");
+
+        // Find all images of grass tiles
+        const grassImages = document.querySelectorAll('img');
+        const clickableGrass = Array.from(grassImages).filter(img => {
+            const src = img.src;
+            const isGrass = src.includes('/img/tall_grass/'); // Check if the image is a grass tile
+            const isClickable = !isGreyedOut(img); // Ensure it's not greyed out
+            return isGrass && isClickable;
+        });
+
+        if (clickableGrass.length > 0) {
+            // Log available clickable grass tiles
+            console.log(`Found ${clickableGrass.length} clickable grass tiles.`);
+
+            // Click a random grass tile
+            const randomGrass = clickableGrass[Math.floor(Math.random() * clickableGrass.length)];
+            randomGrass.click();
+            console.log("Clicked on a random grass tile!");
+
+            // Handle popup if it appears
+            setTimeout(handlePopup, 1000); // Wait for the popup to appear
+        } else {
+            console.log("No clickable grass tiles found. Redirecting immediately.");
+            redirectToStorageBox(); // Redirect if no grass tiles are found
+        }
+    }
+
+    // Helper function to determine if a grass tile is greyed out
+    function isGreyedOut(img) {
+        const computedStyle = window.getComputedStyle(img);
+        const isGrayscale = computedStyle.filter.includes('grayscale'); // Check CSS filter
+        const isOpacityLow = parseFloat(computedStyle.opacity) < 1; // Check opacity
+        return isGrayscale || isOpacityLow;
+    }
+
+    // Function to handle and close popups
+    function handlePopup() {
+        console.log("Checking for popup...");
+
+        // Check for the popup in the DOM
+        const popup = document.querySelector('div.ui-dialog'); // Update this selector if necessary
+        if (popup) {
+            const okButton = popup.querySelector('button'); // Find the OK button
+            if (okButton) {
+                okButton.click(); // Click the OK button to close the popup
+                console.log("Popup closed. Redirecting...");
+                setTimeout(redirectToStorageBox, 10000); // Redirect after closing the popup
+            } else {
+                console.log("Popup detected, but no OK button found. Redirecting...");
+                redirectToStorageBox();
+            }
+        } else {
+            console.log("No popup detected. Redirecting...");
+            redirectToStorageBox();
+        }
+    }
+
+    // Function to redirect to the storage box page
+    function redirectToStorageBox() {
+        window.location.href = "https://pokeheroes.com/storage_box";
+    }
+
+    // Override default alert behavior to suppress popups
+    window.alert = function(message) {
+        console.log("Blocked alert: " + message);
+    };
+
+    // Start the process
+    clickOnGrass();
+})();
