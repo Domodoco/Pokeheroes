@@ -1,0 +1,39 @@
+// ==UserScript==
+// @name         PH - Treasure Hunt Automation
+// @namespace    https://pokeheroes.com
+// @version      1.1
+// @description  Automates the Treasure Hunt sequence by visiting URLs in order and returns to /treasures at the end.
+// @author       Domodoco
+// @match        https://pokeheroes.com/treasures*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    // Get the current URL
+    const currentURL = window.location.href;
+
+    // URL paths for the treasure hunt
+    const startURL = "https://pokeheroes.com/treasures?start";
+    const chooseURL = "https://pokeheroes.com/treasures?choose=0";
+    const baseURL = "https://pokeheroes.com/treasures";
+
+    // Check and navigate based on the current page
+    if (currentURL === baseURL || currentURL.startsWith(baseURL + "?")) {
+        if (!currentURL.includes("?start") && !currentURL.includes("?choose")) {
+            console.log("Navigating to Start...");
+            window.location.href = startURL; // Go to the start URL
+        } else if (currentURL.includes("?start")) {
+            console.log("Navigating to Choose Chest...");
+            setTimeout(() => {
+                window.location.href = chooseURL; // Go to the choose chest URL
+            }, 1000); // Adjust delay if necessary
+        } else if (currentURL.includes("?choose=0")) {
+            console.log("Returning to Base URL...");
+            setTimeout(() => {
+                window.location.href = baseURL; // Return to /treasures
+            }, 60000); // Adjust delay if necessary
+        }
+    }
+})();
