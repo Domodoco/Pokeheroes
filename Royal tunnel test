@@ -1,0 +1,226 @@
+// ==UserScript==
+// @name         PH - Royal Tunnel Cheat
+// @namespace    http://tampermonkey.net/
+// @version      1.9
+// @description  Automatically answer Royal Tunnel questions with evolution and fallback handling, now fixed for "evolves at level X?" questions.
+// @match        https://pokeheroes.com/royal_tunnel*
+// @grant        none
+// ==/UserScript==
+
+if (getCookie("tunnelDelay") == "") {
+    var tunnelDelay = 1000;
+} else {
+    tunnelDelay = getCookie("tunnelDelay");
+}
+
+var breakCookie = "";
+if (getCookie("tunnelBreak") == "") {
+    var tunnelBreak = false;
+} else {
+    tunnelBreak = getCookie("tunnelBreak");
+    if (tunnelBreak == "true") {
+        breakCookie = "checked";
+    } else {
+        breakCookie = "";
+    }
+}
+
+if (document.body.innerText.includes("Start exploring")) {
+    $("#footer")[0].insertAdjacentHTML("beforebegin", `
+        <div style="text-align: center;">
+            <input id="delayinput" type="number" min=600 value=${tunnelDelay}></input>
+            <button id="delaysubmit">Submit delay (milliseconds)</button><br>
+            <div>This sets the delay for the auto-tunnel script, default is 1000ms (1 second).</div>
+        </div><br>
+    `);
+    $("#delaysubmit")[0].addEventListener("click", updateDelay);
+}
+
+if (document.body.innerText.includes("You can either take a break or continue")) {
+    if (tunnelBreak == "false") {
+        location.href = "?cont";
+    }
+}
+
+if (document.getElementsByClassName("royal_tunnel").length > 0) {
+    var el = document.getElementsByClassName("royal_tunnel")[0];
+    var quest = document.getElementsByClassName("royal_quest")[0];
+    var twoType = false;
+    var twoEgg = false;
+    var eggBool = false;
+    var looking;
+    var evolve = false;
+
+    el.insertAdjacentHTML("beforebegin", `
+        <input id="breakcheck" type="checkbox" style="transform: scale(2);" ${breakCookie}>Take breaks?</input>
+    `);
+
+    $("#breakcheck").change(function () {
+        if (this.checked) {
+            document.cookie = "tunnelBreak=true; expires=Thu, 18 Dec 2029 12:00:00 UTC;";
+            breakCookie = "checked";
+        } else {
+            document.cookie = "tunnelBreak=false; expires=Thu, 18 Dec 2029 12:00:00 UTC;";
+            breakCookie = "";
+        }
+    });
+
+    localStorage.setItem("lastQuestion", quest.innerHTML);
+
+    if (quest.innerHTML.includes("Which of these is a ")) {
+        looking = quest.innerHTML.split("Which of these is a ")[1].split("<b>")[0];
+    }
+
+    if (quest.innerHTML.includes("type_icons")) {
+        looking = quest.innerHTML.split("type_icons/")[1].split(".")[0] + ".gif";
+        var count = (quest.innerHTML.match(/type_icons/g) || []).length;
+        if (count == 2) {
+            looking2 = quest.innerHTML.split("type_icons/")[2].split(".")[0] + ".gif";
+            twoType = true;
+        }
+    }
+
+    if (quest.innerHTML.includes("considered as a")) {
+        looking = quest.innerHTML.split("considered as a <b>")[1].split("</b>")[0];
+    }
+
+    if (quest.innerHTML.includes(" Entry:</b> ")) {
+        looking = quest.innerHTML.split("Entry:</b> ")[1].split("</fieldset>")[0]
+            .replace(/\*/g, "")
+            .replace(/\t/g, "")
+            .replace(/\/r\/n/g, "")
+            .split("\\")[0];
+    }
+
+    if (quest.innerHTML.includes("<b>egggroup(s)</b>")) {
+        var egggcs = quest.innerHTML.split("<i>");
+        if (egggcs.length > 2) {
+            looking2 = egggcs[2].split("</i>")[0];
+            twoEgg = true;
+        }
+        looking = egggcs[1].split("</i>")[0];
+        eggBool = true;
+    }
+
+    if (quest.innerHTML.includes("these needs <b>")) {
+        looking = quest.innerHTML.split("these needs <b>")[1].split(" ")[0];
+    }
+
+    // ** Handle "evolves at level X" questions **
+    if (quest.innerHTML.includes("evolves at level")) {
+        looking = quest.innerHTML.split("evolves at level <b>")[1].split("</b>")[0]; // Extract level X
+        evolve = true;
+        console.log(`Looking for Pokémon that evolves at level: ${looking}`);
+    }
+
+    // Watch for changes to the answer pool dynamically
+    const observer = new MutationObserver(() => {
+        console.log("Answer pool updated. Re-processing answers.");
+        processAnswers(el, looking, twoType, twoEgg, eggBool, evolve);
+    });
+
+    observer.observe(el, { childList: true, subtree: true });
+
+    // Initial processing
+    processAnswers(el, looking, twoType, twoEgg, eggBool, evolve);
+}
+
+function processAnswers(el, looking, twoType, twoEgg, eggBool, evolve) {
+    const answers = el.getElementsByTagName("a");
+    let index = 1;
+    let wrongAnswers = 0;
+    let lastAnswerElement = null;
+
+    for (let answer of answers) {
+        const s = answer.innerHTML.split("/");
+        lastAnswerElement = answer; // Keep track of the last answer
+
+        if (evolve) {
+            poketunnel2(parseInt(s[s.length - 1].split(".")[0]), answer.href, looking, index, wrongAnswers, answers.length);
+        } else {
+            poketunnel(parseInt(s[s.length - 1].split(".")[0]), answer.href, looking, answer, index, wrongAnswers, answers.length, lastAnswerElement);
+        }
+        index++;
+    }
+}
+
+function poketunnel(id, link, looking, answerElement, index, wrongAnswers, totalAnswers, lastAnswerElement) {
+    $.ajax({
+        type: "POST",
+        url: "includes/ajax/pokedex/view_entry.php",
+        data: { pkdxnr: id },
+        success: function (data) {
+            var name = data.split('<span style="font-size: 14pt; font-weight: bold">#')[1].split("</span>")[0];
+            name = name.split(" ").slice(1).join(" ");
+
+            console.log(`Checking answer ${index}: ${name} against ${looking}`);
+
+            if (data.includes(looking)) {
+                answerElement.insertAdjacentHTML("beforeend", ` ✅ (${index})`);
+                setTimeout(() => document.location = link, (parseInt(tunnelDelay) + Math.random() * 100));
+            } else {
+                answerElement.insertAdjacentHTML("beforeend", ` ❌ (${index})`);
+                wrongAnswers++;
+
+                // Fallback to last option if two answers are wrong
+                if (wrongAnswers === 2 && index === totalAnswers) {
+                    console.log("Fallback triggered. Picking last option.");
+                    setTimeout(() => document.location = lastAnswerElement.href, (parseInt(tunnelDelay) + Math.random() * 100));
+                }
+            }
+        }
+    });
+}
+
+function poketunnel2(id, link, looking, index, wrongAnswers, totalAnswers) {
+    $.ajax({
+        type: "POST",
+        url: "includes/ajax/pokedex/view_entry.php",
+        data: { pkdxnr: id },
+        success: function (data) {
+            var name = data.split('<span style="font-size: 14pt; font-weight: bold">#')[1].split("</span>")[0];
+            name = name.split(" ").slice(1).join(" ");
+
+            // Extract level from the AJAX response
+            var levelMatch = data.match(/Level (\d+)/);
+            var level = levelMatch ? levelMatch[1] : null;
+
+            console.log(`Checking answer ${index}: ${name}, Evolution Level: ${level} against ${looking}`);
+
+            if (level === looking) {
+                console.log(`Correct match: ${name} evolves at level ${level}`);
+                setTimeout(() => document.location = link, (parseInt(tunnelDelay) + Math.random() * 100));
+            } else {
+                console.log(`Incorrect: ${name} evolves at level ${level}`);
+                wrongAnswers++;
+
+                // Fallback logic for the last answer
+                if (wrongAnswers === 2 && index === totalAnswers) {
+                    console.log("Fallback triggered. Picking last option.");
+                    setTimeout(() => document.location = link, (parseInt(tunnelDelay) + Math.random() * 100));
+                }
+            }
+        }
+    });
+}
+
+function updateDelay() {
+    tunnelDelay = $("#delayinput")[0].value;
+    document.cookie = `tunnelDelay=${tunnelDelay}; expires=Thu, 18 Dec 2029 12:00:00 UTC;`;
+}
+
+function getCookie(cname) {
+    var name = cname + "=";
+    var decodedCookie = decodeURIComponent(document.cookie);
+    var ca = decodedCookie.split(';');
+    for (var i = 0; i < ca.length; i++) {
+        var c = ca[i];
+        while (c.charAt(0) == ' ') {
+            c = c.substring(1);
+        }
+        if (c.indexOf(name) == 0) {
+            return c.substring(name.length, c.length);
+        }
+    }
+    return "";
+}
