@@ -1,9 +1,10 @@
 // ==UserScript==
-// @name         PH - Epic Clicker Multi-Click with Feed Toggle
-// @version      3.1
-// @description  Automatically runs on clicklist + multi-click with adjustable batch size and feed toggle
-// @author       warpKaiba (updated by Domodoco)
+// @name         PH - Epic Clicker Multi-Click with Feed Toggle and Limits
+// @version      3.2
+// @description  Automatically runs on clicklist + multi-click with adjustable batch size, feed toggle, interaction limits, and timed return.
+// @author       warpKaiba (updated by Domodoco and ChatGPT)
 // @match        https://pokeheroes.com/pokemon_lite*
+// @match        https://pokeheroes.com/clicklist*
 // @grant        GM.xmlHttpRequest
 // @connect      pokeheroes.com
 // @connect      staticpokeheroes.com
@@ -15,7 +16,14 @@
 
     let clickSpeed = getCookie('clickSpeed') || 500;
     let batchSize = getCookie('batchSize') || 3;
-    let feedEnabled = getCookie('feedEnabled') === 'true'; // Default to false if not set
+    let feedEnabled = getCookie('feedEnabled') === 'true';
+    let interactionCount = 0; // Initialize the interaction counter
+    const interactionLimit = 600; // Limit of interactions before redirect
+    let redirectTimeout = null; // To hold the timeout for redirecting to clicklist
+    let returnTimeout = null; // To hold the timeout for redirecting back to the random page
+    const randomPage = 'https://pokeheroes.com/pokemon_lite?cl_type=random'; // Define the random clicklist page
+    const clickListPage = 'https://pokeheroes.com/clicklist'; // Define the standard clicklist page
+
 
     const cheatContainer = document.querySelector('.cheat_valid');
     if (cheatContainer) {
@@ -23,6 +31,7 @@
     } else {
         initAutoClicker();
     }
+
 
     /**
      * Handles cheat validation logic for multi-click.
@@ -142,9 +151,30 @@
                     performInteraction(pokemon[0], pokemon[1], method, pokemon);
                     oldPKMN = pokemon;
                     console.log(`Interacted with ${method}:`, pokemon);
+
+                    interactionCount++; // Increment the interaction counter
+                    if (interactionCount >= interactionLimit) {
+                        stopClicker(); // Stop auto clicking
+                        redirectToClicklist(); // Call function to redirect
+                        return; // Exit the loop early
+                    }
                 }
             }
         }
+
+        /**
+        * Redirects the user to the clicklist page and schedules a return after 60 minutes.
+        */
+        function redirectToClicklist() {
+            console.log(`Reached interaction limit (${interactionLimit}). Redirecting to clicklist...`);
+            window.location.href = clickListPage;
+             // Set timeout to return to the random page after 60 minutes
+             returnTimeout = setTimeout(function() {
+                window.location.href = randomPage;
+                console.log("Returning to random clicklist page.")
+            }, 6 * 6 * 1000); //6 minutes in milliseconds
+        }
+
 
         /**
          * Determines the interaction method based on feed toggle and berry availability.
@@ -185,6 +215,7 @@
             loadNextPkmn();
         });
     }
+
 
     /**
      * Sets a cookie with the given name and value.
